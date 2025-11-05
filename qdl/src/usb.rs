@@ -18,11 +18,11 @@ pub struct QdlUsbConfig {
     cap: usize,
 }
 
-// TODO: timeouts?
+// USB timeout increased to 120 seconds for large flash operations
 impl Write for QdlUsbConfig {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
         self.dev_handle
-            .write_bulk(self.out_ep, buf, Duration::from_secs(10))
+            .write_bulk(self.out_ep, buf, Duration::from_secs(120))
             .map_err(rusb_err_xlate)
     }
 
@@ -41,7 +41,7 @@ impl Read for QdlUsbConfig {
         }
         // Otherwise, read directly from USB
         self.dev_handle
-            .read_bulk(self.in_ep, out, Duration::from_secs(10))
+            .read_bulk(self.in_ep, out, Duration::from_secs(120))
             .map_err(rusb_err_xlate)
     }
 }
@@ -56,7 +56,7 @@ impl BufRead for QdlUsbConfig {
             }
             match self
                 .dev_handle
-                .read_bulk(self.in_ep, &mut self.buf, Duration::from_secs(10))
+                .read_bulk(self.in_ep, &mut self.buf, Duration::from_secs(120))
             {
                 Ok(n) => {
                     self.cap = n;
