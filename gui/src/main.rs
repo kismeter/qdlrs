@@ -42,6 +42,7 @@ struct QdlGuiApp {
     is_flashing: bool,
     progress: f32,
     log_messages: Arc<Mutex<Vec<String>>>,
+    show_warning_shown: bool,
 }
 
 impl QdlGuiApp {
@@ -176,6 +177,12 @@ impl QdlGuiApp {
 
 impl eframe::App for QdlGuiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Show warning on first run
+        if !self.show_warning_shown {
+            self.show_warning_shown = true;
+            self.add_log("⚠️ WARNING: Flash functionality is incomplete - do not use on production devices!".to_string());
+        }
+        
         // Top panel - Menu bar
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -251,7 +258,11 @@ impl eframe::App for QdlGuiApp {
                         }
                     }
                     if let Some(ref path) = self.loader_path {
-                        ui.label(path.file_name().unwrap().to_string_lossy().to_string());
+                        let name = path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("(unknown)");
+                        ui.label(name);
                     }
                 });
 
@@ -264,7 +275,11 @@ impl eframe::App for QdlGuiApp {
                         }
                     }
                     if let Some(ref path) = self.rom_directory {
-                        ui.label(path.file_name().unwrap().to_string_lossy().to_string());
+                        let name = path
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("(root)");
+                        ui.label(name);
                     }
                 });
 
@@ -332,8 +347,10 @@ impl eframe::App for QdlGuiApp {
             });
         });
 
-        // Request repaint for progress updates
-        ctx.request_repaint();
+        // Request repaint only during active operations
+        if self.is_flashing {
+            ctx.request_repaint();
+        }
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {

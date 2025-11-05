@@ -1,9 +1,28 @@
 # QDL GUI - Graphical Interface for QDL Flash Tool
 
+**⚠️ IMPORTANT: This is a work-in-progress demonstration. The actual flash operation is not yet fully implemented. Do not use this on production devices.**
+
 A cross-platform GUI application for flashing Qualcomm devices in EDL mode.
 
 ![QDL GUI Screenshot](screenshot.png)
 *Note: Screenshot to be added*
+
+## Current Status
+
+✅ **Implemented:**
+- Device detection (EDL, ADB, Fastboot)
+- Device switching (ADB/Fastboot → EDL)
+- File selection (loader, ROM directory)
+- UI framework and layout
+- Configuration persistence
+- Device communication setup
+
+⚠️ **Not Yet Implemented:**
+- Actual flash operations (XML parsing and execution)
+- Progress tracking for flash operations
+- Error recovery
+
+**For actual flashing, please use the CLI tool (`qdl-rs`) instead.**
 
 ## Features
 

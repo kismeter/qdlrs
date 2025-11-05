@@ -152,24 +152,27 @@ fn flash_internal(
     let all_files: Vec<PathBuf> = rawprogram_files.into_iter().chain(patch_files).collect();
 
     for (idx, file_path) in all_files.iter().enumerate() {
+        let file_name = file_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown");
         add_log(format!(
             "Processing {}/{}: {}",
             idx + 1,
             all_files.len(),
-            file_path.file_name().unwrap().to_string_lossy()
+            file_name
         ));
 
         let program_file = fs::read(file_path)?;
         let _xml = Element::parse(&program_file[..])?;
 
-        // Here we would parse and execute the XML instructions
-        // For now, this is a simplified version
-        // The full implementation would call parse_program_xml from the CLI
-        add_log(format!(
-            "Parsed XML file: {}",
-            file_path.file_name().unwrap().to_string_lossy()
-        ));
+        // TODO: Full XML parsing and execution using parse_program_xml from CLI
+        // For now, this is a basic implementation that sets up the device
+        // Full implementation would require integrating the programfile module
+        add_log(format!("Parsed XML file: {}", file_name));
     }
+
+    add_log("WARNING: Full flash implementation is incomplete - this is a demonstration only".to_string());
 
     // Reset the device
     add_log("Resetting device...".to_string());
