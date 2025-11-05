@@ -7,12 +7,16 @@ use qdl::parsers::{firehose_parser_ack_nak, firehose_parser_configure_response};
 use qdl::sahara::{sahara_run, SaharaCmdModeCmd, SaharaMode};
 use qdl::types::FirehoseResetMode;
 use qdl::types::{FirehoseConfiguration, FirehoseStorageType, QdlBackend, QdlDevice};
-use qdl::{firehose_configure, firehose_read, firehose_reset, setup_target_device};
+use qdl::{
+    firehose_configure, firehose_read, firehose_reset, firehose_set_bootable, setup_target_device,
+};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use xmltree::Element;
+
+use crate::programfile::parse_program_xml;
 
 /// Flash a device with ROM files
 pub fn flash_device(
@@ -54,6 +58,7 @@ pub fn flash_device(
         rawprogram_files,
         patch_files,
         storage_type,
+        rom_dir,
         Arc::clone(&log_messages),
     ) {
         add_log(format!("Flash operation failed: {}", e));
@@ -68,6 +73,7 @@ fn flash_internal(
     rawprogram_files: Vec<PathBuf>,
     patch_files: Vec<PathBuf>,
     storage_type: String,
+    rom_dir: PathBuf,
     log_messages: Arc<Mutex<Vec<String>>>,
 ) -> Result<()> {
     let add_log = |msg: String| {
@@ -151,28 +157,47 @@ fn flash_internal(
     // Process rawprogram and patch files
     let all_files: Vec<PathBuf> = rawprogram_files.into_iter().chain(patch_files).collect();
 
+    let tmp_path_string = match cfg!(target_os = "windows") {
+        true => "C:\\Temp\\",
+        false => "/tmp/out/",
+    };
+
+    let mut bootable_part_idx: Option<u8> = None;
     for (idx, file_path) in all_files.iter().enumerate() {
         let file_name = file_path
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unknown");
         add_log(format!(
-            "Processing {}/{}: {}",
+            "Flashing {}/{}: {}",
             idx + 1,
             all_files.len(),
             file_name
         ));
 
         let program_file = fs::read(file_path)?;
-        let _xml = Element::parse(&program_file[..])?;
+        let xml = Element::parse(&program_file[..])?;
 
-        // TODO: Full XML parsing and execution using parse_program_xml from CLI
-        // For now, this is a basic implementation that sets up the device
-        // Full implementation would require integrating the programfile module
-        add_log(format!("Parsed XML file: {}", file_name));
+        // Parse and execute the XML instructions
+        if let Some(n) = parse_program_xml(
+            &mut qdl_dev,
+            &xml,
+            &rom_dir,
+            Path::new(tmp_path_string),
+            true,  // allow_missing_files
+            false, // verbose
+        )? {
+            bootable_part_idx = Some(n);
+        }
+
+        add_log(format!("Completed: {}", file_name));
     }
 
-    add_log("WARNING: Full flash implementation is incomplete - this is a demonstration only".to_string());
+    // Mark the correct LUN as bootable if needed
+    if let Some(idx) = bootable_part_idx {
+        add_log(format!("Setting partition {} as bootable", idx));
+        firehose_set_bootable(&mut qdl_dev, idx)?;
+    }
 
     // Reset the device
     add_log("Resetting device...".to_string());

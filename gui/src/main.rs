@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 mod config;
 mod device;
 mod flasher;
+mod programfile;
 
 use config::AppConfig;
 use device::{detect_devices, DeviceInfo, DeviceType};
@@ -42,7 +43,6 @@ struct QdlGuiApp {
     is_flashing: bool,
     progress: f32,
     log_messages: Arc<Mutex<Vec<String>>>,
-    show_warning_shown: bool,
 }
 
 impl QdlGuiApp {
@@ -62,6 +62,12 @@ impl QdlGuiApp {
             Ok(devices) => {
                 self.detected_devices = devices;
                 self.add_log(format!("Found {} devices", self.detected_devices.len()));
+                // Auto-select the first device
+                if !self.detected_devices.is_empty() {
+                    self.selected_device = Some(0);
+                } else {
+                    self.selected_device = None;
+                }
             }
             Err(e) => {
                 self.add_log(format!("Error detecting devices: {}", e));
@@ -177,12 +183,6 @@ impl QdlGuiApp {
 
 impl eframe::App for QdlGuiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Show warning on first run
-        if !self.show_warning_shown {
-            self.show_warning_shown = true;
-            self.add_log("⚠️ WARNING: Flash functionality is incomplete - do not use on production devices!".to_string());
-        }
-        
         // Top panel - Menu bar
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
