@@ -4,6 +4,7 @@
 use anyhow::Result;
 use eframe::egui;
 use std::path::PathBuf;
+use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 
 mod config;
@@ -13,6 +14,23 @@ mod programfile;
 
 use config::AppConfig;
 use device::{detect_devices, DeviceInfo, DeviceType};
+
+impl Default for QdlGuiApp {
+    fn default() -> Self {
+        Self {
+            config: AppConfig::default(),
+            detected_devices: Vec::new(),
+            selected_device: None,
+            rom_directory: None,
+            loader_path: None,
+            storage_type: String::new(),
+            is_flashing: false,
+            progress: 0.0,
+            log_messages: Arc::new(Mutex::new(Vec::new())),
+            flash_completion_rx: None,
+        }
+    }
+}
 
 fn main() -> Result<()> {
     env_logger::init();
@@ -32,7 +50,6 @@ fn main() -> Result<()> {
     .map_err(|e| anyhow::anyhow!("GUI error: {}", e))
 }
 
-#[derive(Default)]
 struct QdlGuiApp {
     config: AppConfig,
     detected_devices: Vec<DeviceInfo>,
@@ -43,6 +60,7 @@ struct QdlGuiApp {
     is_flashing: bool,
     progress: f32,
     log_messages: Arc<Mutex<Vec<String>>>,
+    flash_completion_rx: Option<Receiver<bool>>,
 }
 
 impl QdlGuiApp {
@@ -53,6 +71,7 @@ impl QdlGuiApp {
         Self {
             storage_type,
             config,
+            flash_completion_rx: None,
             ..Default::default()
         }
     }
@@ -167,15 +186,21 @@ impl QdlGuiApp {
             let device_serial = device.serial.clone();
             let log_messages = Arc::clone(&self.log_messages);
 
+            // Create a channel for completion notification
+            let (tx, rx) = channel();
+            self.flash_completion_rx = Some(rx);
+
             // Spawn background thread for flashing
             std::thread::spawn(move || {
-                flasher::flash_device(
+                let success = flasher::flash_device(
                     device_serial,
                     loader_path,
                     rom_dir,
                     storage_type,
                     log_messages,
                 );
+                // Notify completion
+                let _ = tx.send(success);
             });
         }
     }
@@ -183,6 +208,23 @@ impl QdlGuiApp {
 
 impl eframe::App for QdlGuiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Check for flash completion
+        if let Some(rx) = &self.flash_completion_rx {
+            if let Ok(success) = rx.try_recv() {
+                self.is_flashing = false;
+                self.flash_completion_rx = None;
+                if success {
+                    self.add_log(
+                        "Flash completed successfully - refreshing devices...".to_string(),
+                    );
+                } else {
+                    self.add_log("Flash failed - refreshing devices...".to_string());
+                }
+                // Refresh devices after flash completion
+                self.refresh_devices();
+            }
+        }
+
         // Top panel - Menu bar
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {

@@ -25,7 +25,7 @@ pub fn flash_device(
     rom_dir: PathBuf,
     storage_type: String,
     log_messages: Arc<Mutex<Vec<String>>>,
-) {
+) -> bool {
     let add_log = |msg: String| {
         log::info!("{}", msg);
         if let Ok(mut logs) = log_messages.lock() {
@@ -45,14 +45,14 @@ pub fn flash_device(
 
     if rawprogram_files.is_empty() {
         add_log("Error: No rawprogram XML files found in ROM directory".to_string());
-        return;
+        return false;
     }
 
     add_log(format!("Found {} rawprogram files", rawprogram_files.len()));
     add_log(format!("Found {} patch files", patch_files.len()));
 
     // Perform the actual flashing
-    if let Err(e) = flash_internal(
+    match flash_internal(
         device_serial,
         loader_path,
         rawprogram_files,
@@ -61,9 +61,14 @@ pub fn flash_device(
         rom_dir,
         Arc::clone(&log_messages),
     ) {
-        add_log(format!("Flash operation failed: {}", e));
-    } else {
-        add_log("Flash operation completed successfully!".to_string());
+        Ok(_) => {
+            add_log("Flash operation completed successfully!".to_string());
+            true
+        }
+        Err(e) => {
+            add_log(format!("Flash operation failed: {}", e));
+            false
+        }
     }
 }
 
