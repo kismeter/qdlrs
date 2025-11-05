@@ -2,6 +2,9 @@
 
 A cross-platform GUI application for flashing Qualcomm devices in EDL mode.
 
+![QDL GUI Screenshot](screenshot.png)
+*Note: Screenshot to be added*
+
 ## Features
 
 - **Multi-device support**: Automatically detect EDL, ADB, and Fastboot devices
