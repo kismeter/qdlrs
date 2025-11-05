@@ -21,13 +21,13 @@ impl Default for AppConfig {
         } else {
             "adb".to_string()
         };
-        
+
         let fastboot_path = if cfg!(target_os = "windows") {
             "fastboot.exe".to_string()
         } else {
             "fastboot".to_string()
         };
-        
+
         Self {
             adb_path,
             fastboot_path,
@@ -50,7 +50,7 @@ impl AppConfig {
         }
         Self::default()
     }
-    
+
     /// Save configuration to file
     pub fn save(&self) -> anyhow::Result<()> {
         if let Some(config_path) = Self::config_file_path() {
@@ -62,13 +62,9 @@ impl AppConfig {
         }
         Ok(())
     }
-    
+
     /// Get the configuration file path
     fn config_file_path() -> Option<PathBuf> {
-        if let Some(config_dir) = dirs::config_dir() {
-            Some(config_dir.join("qdl-gui").join("config.json"))
-        } else {
-            None
-        }
+        dirs::config_dir().map(|config_dir| config_dir.join("qdl-gui").join("config.json"))
     }
 }

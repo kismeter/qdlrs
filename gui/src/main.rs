@@ -1,28 +1,28 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
-use eframe::egui;
 use anyhow::Result;
-use std::sync::{Arc, Mutex};
+use eframe::egui;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
-mod device;
 mod config;
+mod device;
 mod flasher;
 
-use device::{DeviceInfo, DeviceType, detect_devices};
 use config::AppConfig;
+use device::{detect_devices, DeviceInfo, DeviceType};
 
 fn main() -> Result<()> {
     env_logger::init();
-    
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([800.0, 600.0])
             .with_title("QDL Flash Tool"),
         ..Default::default()
     };
-    
+
     eframe::run_native(
         "QDL Flash Tool",
         options,
@@ -48,14 +48,14 @@ impl QdlGuiApp {
     fn new() -> Self {
         let config = AppConfig::load();
         let storage_type = config.last_storage_type.clone();
-        
+
         Self {
             storage_type,
             config,
             ..Default::default()
         }
     }
-    
+
     fn refresh_devices(&mut self) {
         match detect_devices() {
             Ok(devices) => {
@@ -67,17 +67,21 @@ impl QdlGuiApp {
             }
         }
     }
-    
+
     fn add_log(&mut self, message: String) {
         log::info!("{}", message);
         if let Ok(mut logs) = self.log_messages.lock() {
-            logs.push(format!("[{}] {}", chrono::Local::now().format("%H:%M:%S"), message));
+            logs.push(format!(
+                "[{}] {}",
+                chrono::Local::now().format("%H:%M:%S"),
+                message
+            ));
             if logs.len() > 1000 {
                 logs.remove(0);
             }
         }
     }
-    
+
     fn switch_to_edl(&mut self) {
         if let Some(idx) = self.selected_device {
             if let Some(device) = self.detected_devices.get(idx).cloned() {
@@ -87,7 +91,9 @@ impl QdlGuiApp {
                     }
                     DeviceType::ADB => {
                         self.add_log("Rebooting to EDL via ADB...".to_string());
-                        if let Err(e) = device::reboot_adb_to_edl(&self.config.adb_path, &device.serial) {
+                        if let Err(e) =
+                            device::reboot_adb_to_edl(&self.config.adb_path, &device.serial)
+                        {
                             self.add_log(format!("Failed to reboot via ADB: {}", e));
                         } else {
                             self.add_log("Rebooted to EDL successfully".to_string());
@@ -98,7 +104,10 @@ impl QdlGuiApp {
                     }
                     DeviceType::Fastboot => {
                         self.add_log("Rebooting to EDL via Fastboot...".to_string());
-                        if let Err(e) = device::reboot_fastboot_to_edl(&self.config.fastboot_path, &device.serial) {
+                        if let Err(e) = device::reboot_fastboot_to_edl(
+                            &self.config.fastboot_path,
+                            &device.serial,
+                        ) {
                             self.add_log(format!("Failed to reboot via Fastboot: {}", e));
                         } else {
                             self.add_log("Rebooted to EDL successfully".to_string());
@@ -110,47 +119,47 @@ impl QdlGuiApp {
             }
         }
     }
-    
+
     fn start_flash(&mut self) {
         if self.is_flashing {
             self.add_log("Already flashing...".to_string());
             return;
         }
-        
+
         // Validate inputs
         if self.selected_device.is_none() {
             self.add_log("No device selected".to_string());
             return;
         }
-        
+
         if self.rom_directory.is_none() {
             self.add_log("No ROM directory selected".to_string());
             return;
         }
-        
+
         if self.loader_path.is_none() {
             self.add_log("No loader file selected".to_string());
             return;
         }
-        
+
         let device_idx = self.selected_device.unwrap();
         if let Some(device) = self.detected_devices.get(device_idx).cloned() {
             if device.device_type != DeviceType::EDL {
                 self.add_log("Device is not in EDL mode. Please switch to EDL first.".to_string());
                 return;
             }
-            
+
             self.is_flashing = true;
             self.progress = 0.0;
             self.add_log("Starting flash operation...".to_string());
-            
+
             // Clone necessary data for the background thread
             let rom_dir = self.rom_directory.clone().unwrap();
             let loader_path = self.loader_path.clone().unwrap();
             let storage_type = self.storage_type.clone();
             let device_serial = device.serial.clone();
             let log_messages = Arc::clone(&self.log_messages);
-            
+
             // Spawn background thread for flashing
             std::thread::spawn(move || {
                 flasher::flash_device(
@@ -185,12 +194,12 @@ impl eframe::App for QdlGuiApp {
                 });
             });
         });
-        
+
         // Main content area
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("QDL Flash Tool");
             ui.add_space(10.0);
-            
+
             // Device selection section
             ui.group(|ui| {
                 ui.label("Device Selection");
@@ -202,31 +211,34 @@ impl eframe::App for QdlGuiApp {
                         self.switch_to_edl();
                     }
                 });
-                
+
                 ui.add_space(5.0);
-                
+
                 // Device dropdown
                 egui::ComboBox::from_label("Select Device")
                     .selected_text(
                         self.selected_device
                             .and_then(|idx| self.detected_devices.get(idx))
                             .map(|d| format!("{} - {} ({})", d.device_type, d.serial, d.name))
-                            .unwrap_or_else(|| "No device selected".to_string())
+                            .unwrap_or_else(|| "No device selected".to_string()),
                     )
                     .show_ui(ui, |ui| {
                         for (idx, device) in self.detected_devices.iter().enumerate() {
-                            let label = format!("{} - {} ({})", device.device_type, device.serial, device.name);
+                            let label = format!(
+                                "{} - {} ({})",
+                                device.device_type, device.serial, device.name
+                            );
                             ui.selectable_value(&mut self.selected_device, Some(idx), label);
                         }
                     });
             });
-            
+
             ui.add_space(10.0);
-            
+
             // File selection section
             ui.group(|ui| {
                 ui.label("File Selection");
-                
+
                 ui.horizontal(|ui| {
                     ui.label("Loader file:");
                     if ui.button("Browse...").clicked() {
@@ -242,7 +254,7 @@ impl eframe::App for QdlGuiApp {
                         ui.label(path.file_name().unwrap().to_string_lossy().to_string());
                     }
                 });
-                
+
                 ui.horizontal(|ui| {
                     ui.label("ROM directory:");
                     if ui.button("Browse...").clicked() {
@@ -255,7 +267,7 @@ impl eframe::App for QdlGuiApp {
                         ui.label(path.file_name().unwrap().to_string_lossy().to_string());
                     }
                 });
-                
+
                 ui.horizontal(|ui| {
                     ui.label("Storage type:");
                     egui::ComboBox::from_label("")
@@ -268,31 +280,32 @@ impl eframe::App for QdlGuiApp {
                         });
                 });
             });
-            
+
             ui.add_space(10.0);
-            
+
             // Flash button and progress
             ui.group(|ui| {
                 ui.horizontal(|ui| {
-                    if ui.add_enabled(!self.is_flashing, egui::Button::new("Start Flash"))
+                    if ui
+                        .add_enabled(!self.is_flashing, egui::Button::new("Start Flash"))
                         .clicked()
                     {
                         self.start_flash();
                     }
-                    
+
                     if self.is_flashing {
                         ui.spinner();
                         ui.label(format!("Flashing... {:.0}%", self.progress * 100.0));
                     }
                 });
-                
+
                 if self.is_flashing {
                     ui.add(egui::ProgressBar::new(self.progress).show_percentage());
                 }
             });
-            
+
             ui.add_space(10.0);
-            
+
             // Log window
             ui.group(|ui| {
                 ui.label("Log");
@@ -308,7 +321,7 @@ impl eframe::App for QdlGuiApp {
                     });
             });
         });
-        
+
         // Bottom panel - Settings paths
         egui::TopBottomPanel::bottom("bottom_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -318,11 +331,11 @@ impl eframe::App for QdlGuiApp {
                 ui.text_edit_singleline(&mut self.config.fastboot_path);
             });
         });
-        
+
         // Request repaint for progress updates
         ctx.request_repaint();
     }
-    
+
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         // Save config before exiting
         self.config.last_loader_path = self.loader_path.clone();
@@ -331,4 +344,3 @@ impl eframe::App for QdlGuiApp {
         let _ = self.config.save();
     }
 }
-

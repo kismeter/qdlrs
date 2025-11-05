@@ -7,6 +7,7 @@ Qualcomm SoCs feature the Emergency Download Mode (EDL, widely known as '9008 mo
 ## Contents
 ```
 cli/ - A CLI tool used to communicate with devices in EDL mode
+gui/ - A cross-platform GUI application for flashing devices in EDL mode
 qdl/ - Sahara / Firehose library, with USB convenience wrappers
 qramdump/ - Tool to receive memory dumps from a crashed device
 ```
@@ -17,7 +18,7 @@ You're expected to have a recent installation of Rust. You can acquire one with 
 
 Run `cargo build [--release]` to build all executables within this repo. The binaries will appear in `target/debug/` or `target/release`, respectively.
 
-Use `cargo run [--release] --bin <qdl-rs/qramdump> [-- args]` to quickly build one of the programs from source and run it.
+Use `cargo run [--release] --bin <qdl-rs/qdl-gui/qramdump> [-- args]` to quickly build one of the programs from source and run it.
 
 ## Running the programs
 <details>
@@ -81,6 +82,29 @@ Options:
   -V, --version
           Print version
 ```
+
+</details>
+
+<details>
+
+<summary>qdl-gui</summary>
+
+A cross-platform graphical interface for flashing devices in EDL mode.
+
+**Features:**
+- Automatic device detection (EDL, ADB, Fastboot)
+- Device switching (ADB/Fastboot → EDL)
+- ROM directory selection
+- Real-time progress and logging
+- Configurable ADB/Fastboot paths
+- Persistent configuration
+
+**Usage:**
+```bash
+cargo run --bin qdl-gui --release
+```
+
+See [gui/README.md](gui/README.md) for detailed documentation.
 
 </details>
 
