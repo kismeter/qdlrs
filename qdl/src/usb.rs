@@ -18,14 +18,14 @@ pub struct QdlUsbConfig {
     cap: usize,
 }
 
-// USB timeout in seconds for all operations
-// Increased to 120s to allow sufficient time for device to process large partition writes
-const USB_TIMEOUT_SECS: u64 = 120;
+// Use a short timeout for individual USB operations (similar to C implementation's 100ms)
+// The firehose_read layer handles overall timeout and retry logic
+const USB_TIMEOUT_MS: u64 = 1000;
 
 impl Write for QdlUsbConfig {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
         self.dev_handle
-            .write_bulk(self.out_ep, buf, Duration::from_secs(USB_TIMEOUT_SECS))
+            .write_bulk(self.out_ep, buf, Duration::from_millis(USB_TIMEOUT_MS))
             .map_err(rusb_err_xlate)
     }
 
@@ -44,7 +44,7 @@ impl Read for QdlUsbConfig {
         }
         // Otherwise, read directly from USB
         self.dev_handle
-            .read_bulk(self.in_ep, out, Duration::from_secs(USB_TIMEOUT_SECS))
+            .read_bulk(self.in_ep, out, Duration::from_millis(USB_TIMEOUT_MS))
             .map_err(rusb_err_xlate)
     }
 }
@@ -60,7 +60,7 @@ impl BufRead for QdlUsbConfig {
             match self.dev_handle.read_bulk(
                 self.in_ep,
                 &mut self.buf,
-                Duration::from_secs(USB_TIMEOUT_SECS),
+                Duration::from_millis(USB_TIMEOUT_MS),
             ) {
                 Ok(n) => {
                     self.cap = n;

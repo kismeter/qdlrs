@@ -9,6 +9,7 @@ use serial::setup_serial_device;
 use std::cmp::min;
 use std::io::{Read, Write};
 use std::str::{self, FromStr};
+use std::time::{Duration, Instant};
 use types::FirehoseResetMode;
 use types::FirehoseStatus;
 use types::FirehoseStorageType;
@@ -72,28 +73,46 @@ pub fn firehose_read<T: QdlChan>(
     channel: &mut T,
     response_parser: fn(&mut T, &IndexMap<String, String>) -> Result<FirehoseStatus, anyhow::Error>,
 ) -> Result<FirehoseStatus, anyhow::Error> {
-    let mut got_any_data = false;
+    let mut response: Option<FirehoseStatus> = None;
     let mut pending: Vec<u8> = Vec::new();
 
+    // Overall timeout of 120 seconds for operations that may take time
+    // (e.g., device processing large partition writes)
+    let overall_timeout = Duration::from_secs(120);
+    let start_time = Instant::now();
+
     loop {
+        // Check if we've exceeded the overall timeout
+        if start_time.elapsed() > overall_timeout {
+            if let Some(resp) = response {
+                // We got a response but hit overall timeout waiting for more data
+                // Return the response we got
+                return Ok(resp);
+            } else {
+                // No response received within timeout period
+                bail!("Timeout waiting for response from device");
+            }
+        }
+
         // Use BufRead to peek at available data
         let available = match channel.fill_buf() {
             Ok(buf) => buf,
             Err(e) => match e.kind() {
-                // In some cases (like with welcome messages), there's no acking
-                // and a timeout is the "end of data" marker instead..
+                // With short USB timeouts, we expect frequent timeouts while waiting
+                // for device responses. The C implementation uses 100ms timeout per read
+                // and retries until overall timeout or response is received.
                 std::io::ErrorKind::TimedOut => {
-                    if got_any_data {
-                        return Ok(FirehoseStatus::Ack);
-                    } else {
-                        return Err(e.into());
+                    if let Some(resp) = response {
+                        // We already got a valid response, timeout means no more data
+                        // (e.g., finished receiving log messages after the response)
+                        return Ok(resp);
                     }
+                    // No response yet, continue retrying
+                    continue;
                 }
                 _ => return Err(e.into()),
             },
         };
-
-        got_any_data = true;
 
         // When channel is a non-packetized BufRead (e.g. serial) XML documents
         // are not separated from each other, or from rawmode data. Search for
@@ -173,8 +192,13 @@ pub fn firehose_read<T: QdlChan>(
                     bail!("Firehose requested a restart. Run the program again.");
                 }
 
-                // Pass other nodes to specialized parsers
-                return response_parser(channel, &e.attributes);
+                // Parse the response and store it
+                // We continue looping to consume any trailing log messages
+                let parsed_response = response_parser(channel, &e.attributes)?;
+                response = Some(parsed_response);
+                // Note: Unlike the original code, we don't return immediately
+                // Instead we store the response and continue to consume log messages
+                // until we get a timeout (similar to C implementation)
             }
         } else {
             // Didn't find the tail of the XML document in "pending" +
