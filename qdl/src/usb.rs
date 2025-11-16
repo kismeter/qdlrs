@@ -13,6 +13,7 @@ pub struct QdlUsbConfig {
     dev_handle: rusb::DeviceHandle<GlobalContext>,
     in_ep: u8,
     out_ep: u8,
+    out_maxpktsize: u16,
     buf: Vec<u8>,
     pos: usize,
     cap: usize,
@@ -77,6 +78,12 @@ impl BufRead for QdlUsbConfig {
 }
 
 impl QdlReadWrite for QdlUsbConfig {}
+
+impl QdlUsbConfig {
+    pub fn out_maxpktsize(&self) -> u16 {
+        self.out_maxpktsize
+    }
+}
 
 const USB_VID_QCOM: u16 = 0x05c6;
 const USB_PID_EDL: [u16; 2] = [0x9008 /* EDL */, 0x900e /* Ramdump */];
@@ -154,8 +161,9 @@ pub fn setup_usb_device(serial_no: Option<String>) -> Result<QdlUsbConfig> {
         .find(|e| {
             e.direction() == rusb::Direction::Out && e.transfer_type() == rusb::TransferType::Bulk
         })
-        .unwrap()
-        .address();
+        .unwrap();
+    let out_ep_addr = out_ep.address();
+    let out_maxpktsize = out_ep.max_packet_size();
 
     // Make sure we can actually poke at the device
     dev_handle.set_auto_detach_kernel_driver(true).ok();
@@ -165,7 +173,8 @@ pub fn setup_usb_device(serial_no: Option<String>) -> Result<QdlUsbConfig> {
     Ok(QdlUsbConfig {
         dev_handle,
         in_ep,
-        out_ep,
+        out_ep: out_ep_addr,
+        out_maxpktsize,
         buf: Vec::new(),
         pos: 0,
         cap: 0,

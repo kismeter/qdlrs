@@ -454,6 +454,7 @@ pub fn firehose_program_storage<T: QdlChan>(
     pb.message(&format!("Sending partition {label}: "));
     pb.set_units(Units::Bytes);
 
+    let mut total_bytes_sent: usize = 0;
     while sectors_left > 0 {
         let chunk_size_sectors = min(
             sectors_left,
@@ -473,12 +474,19 @@ pub fn firehose_program_storage<T: QdlChan>(
             bail!("Wrote an unexpected number of bytes ({})", n);
         }
 
+        total_bytes_sent += n;
         sectors_left -= chunk_size_sectors;
         pb.add((chunk_size_sectors * channel.fh_config().storage_sector_size) as u64);
     }
 
-    // Send a Zero-Length Packet to indicate end of stream
-    if channel.fh_config().backend == QdlBackend::Usb && !channel.fh_config().skip_usb_zlp {
+    // Send a Zero-Length Packet to indicate end of stream, but only if needed.
+    // Like the C implementation, we only send ZLP if the total bytes sent is
+    // a multiple of the USB max packet size (typically 512 bytes for USB 2.0 bulk).
+    // This fixes the macOS timeout issue where unconditional ZLP was problematic.
+    const USB_BULK_MAX_PACKET_SIZE: usize = 512;
+    if channel.fh_config().backend == QdlBackend::Usb
+        && total_bytes_sent.is_multiple_of(USB_BULK_MAX_PACKET_SIZE)
+    {
         let _ = channel.write(&[]).expect("Error sending ZLP");
     }
 
