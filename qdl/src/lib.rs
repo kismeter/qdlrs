@@ -75,6 +75,7 @@ pub fn firehose_read<T: QdlChan>(
 ) -> Result<FirehoseStatus, anyhow::Error> {
     let mut response: Option<FirehoseStatus> = None;
     let mut pending: Vec<u8> = Vec::new();
+    let mut got_any_data = false;
 
     // Overall timeout of 120 seconds for operations that may take time
     // (e.g., device processing large partition writes)
@@ -88,6 +89,10 @@ pub fn firehose_read<T: QdlChan>(
                 // We got a response but hit overall timeout waiting for more data
                 // Return the response we got
                 return Ok(resp);
+            } else if got_any_data {
+                // We got data (e.g., log messages) but no explicit response
+                // This is expected for some operations like reading welcome messages
+                return Ok(FirehoseStatus::Ack);
             } else {
                 // No response received within timeout period
                 bail!("Timeout waiting for response from device");
@@ -106,14 +111,20 @@ pub fn firehose_read<T: QdlChan>(
                         // We already got a valid response, timeout means no more data
                         // (e.g., finished receiving log messages after the response)
                         return Ok(resp);
+                    } else if got_any_data {
+                        // We got some data (e.g., log messages) but no explicit response
+                        // In some cases (like with welcome messages), there's no acking
+                        // and a timeout is the "end of data" marker instead
+                        return Ok(FirehoseStatus::Ack);
                     }
-                    // No response yet, continue retrying
+                    // No data yet, continue retrying
                     continue;
                 }
                 _ => return Err(e.into()),
             },
         };
 
+        got_any_data = true;
         // When channel is a non-packetized BufRead (e.g. serial) XML documents
         // are not separated from each other, or from rawmode data. Search for
         // </data> in the BufRead stream to find the end of the current
