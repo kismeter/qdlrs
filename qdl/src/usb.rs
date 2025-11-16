@@ -19,10 +19,12 @@ pub struct QdlUsbConfig {
 }
 
 // TODO: timeouts?
+const USB_TIMEOUT_SECS: u64 = 120;
+
 impl Write for QdlUsbConfig {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
         self.dev_handle
-            .write_bulk(self.out_ep, buf, Duration::from_secs(10))
+            .write_bulk(self.out_ep, buf, Duration::from_secs(USB_TIMEOUT_SECS))
             .map_err(rusb_err_xlate)
     }
 
@@ -41,7 +43,7 @@ impl Read for QdlUsbConfig {
         }
         // Otherwise, read directly from USB
         self.dev_handle
-            .read_bulk(self.in_ep, out, Duration::from_secs(10))
+            .read_bulk(self.in_ep, out, Duration::from_secs(USB_TIMEOUT_SECS))
             .map_err(rusb_err_xlate)
     }
 }
@@ -54,10 +56,11 @@ impl BufRead for QdlUsbConfig {
             if self.buf.is_empty() {
                 self.buf.resize(4096, 0);
             }
-            match self
-                .dev_handle
-                .read_bulk(self.in_ep, &mut self.buf, Duration::from_secs(10))
-            {
+            match self.dev_handle.read_bulk(
+                self.in_ep,
+                &mut self.buf,
+                Duration::from_secs(USB_TIMEOUT_SECS),
+            ) {
                 Ok(n) => {
                     self.cap = n;
                 }
