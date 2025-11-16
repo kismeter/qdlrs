@@ -65,10 +65,6 @@ pub struct FirehoseConfiguration {
     pub skip_usb_zlp: bool,
     pub skip_firehose_log: bool,
     pub verbose_firehose: bool,
-
-    // Timeout values in seconds
-    pub usb_timeout_secs: u64,
-    pub usb_data_timeout_secs: u64,
 }
 
 impl Default for FirehoseConfiguration {
@@ -88,8 +84,6 @@ impl Default for FirehoseConfiguration {
             skip_usb_zlp: cfg!(target_os = "macos"),
             skip_firehose_log: true,
             verbose_firehose: false,
-            usb_timeout_secs: 10,
-            usb_data_timeout_secs: 120,
         }
     }
 }
