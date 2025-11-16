@@ -18,7 +18,8 @@ pub struct QdlUsbConfig {
     cap: usize,
 }
 
-// TODO: timeouts?
+// USB timeout in seconds for all operations
+// Increased to 120s to allow sufficient time for device to process large partition writes
 const USB_TIMEOUT_SECS: u64 = 120;
 
 impl Write for QdlUsbConfig {
